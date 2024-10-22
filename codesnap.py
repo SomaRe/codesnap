@@ -160,6 +160,7 @@ def main():
         description='Copy code structure to clipboard. Creates a template configuration if none exists.'
     )
     parser.add_argument('-c', '--config', help='Path to config file (default: codesnap.yml in current directory)')
+    parser.add_argument('-p', '--print', action='store_true', help='Print the collected content to terminal')
     args = parser.parse_args()
 
     try:
@@ -167,7 +168,8 @@ def main():
         final_content = snapper.collect_content()
         pyperclip.copy(final_content)
         print("\nSuccessfully copied content to clipboard!")
-        print(f"Processed files are:\n{final_content}")
+        if args.print:
+            print(f"\nProcessed files are:\n{final_content}")
     except CodeSnapError as e:
         print(f"\nError: {str(e)}")
         print("\nFor help, ensure your codesnap.yml is properly configured.")
