@@ -19,10 +19,25 @@ REM Create installation directory
 set "INSTALL_DIR=%USERPROFILE%\CodeSnap"
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 
-REM Create the Python script
-echo Creating CodeSnap script...
+REM Try to download from GitHub first
 set "SCRIPT_PATH=%INSTALL_DIR%\codesnap.py"
-copy /y "%~dp0codesnap.py" "%SCRIPT_PATH%" > nul
+echo Attempting to download latest version from GitHub...
+powershell -Command "(New-Object Net.WebClient).DownloadFile('https://raw.githubusercontent.com/SomaRe/codesnap/main/codesnap.py', '%SCRIPT_PATH%')"
+
+if not exist "%SCRIPT_PATH%" (
+    echo GitHub download failed. Checking for local file...
+    if exist "%~dp0codesnap.py" (
+        echo Using local codesnap.py file...
+        copy /y "%~dp0codesnap.py" "%SCRIPT_PATH%" > nul
+    ) else (
+        echo Error: Could not find codesnap.py locally or download it.
+        echo Please check your internet connection or ensure codesnap.py is in the same directory.
+        pause
+        exit /b 1
+    )
+) else (
+    echo Successfully downloaded latest version from GitHub.
+)
 
 REM Create launcher batch script
 echo Creating launcher...
