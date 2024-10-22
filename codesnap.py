@@ -6,6 +6,55 @@ import yaml
 import argparse
 from pathlib import Path
 import sys
+from datetime import datetime
+
+def print_help():
+    """Print help message with examples"""
+    help_text = """
+CodeSnap - Copy your code structure to clipboard
+
+Usage: 
+    codesnap [options]
+
+Options:
+    -h, --help          Show this help message
+    -c, --config PATH   Specify path to config file (default: codesnap.yml in current directory)
+    -p, --print         Print the collected content to terminal
+    -o, --output        Save content to a timestamped text file
+    -v, --version       Show version number
+
+Examples:
+    # Run with default config file (codesnap.yml in current directory)
+    codesnap
+
+    # Use specific config file
+    codesnap -c /path/to/config.yml
+
+    # Print content to terminal
+    codesnap -p
+
+    # Save to text file
+    codesnap -o
+
+    # Print to terminal and save to file
+    codesnap -p -o
+
+Config File Format (codesnap.yml):
+    folders:            # Folders to include (relative to config file)
+        - src
+        - lib
+        - utils
+
+    files:             # Specific files to include
+        - config.js
+        - package.json
+
+    ignore:            # Patterns to ignore
+        - "**/*.test.js"
+        - "**/node_modules/**"
+        - "**/.git/**"
+    """
+    print(help_text)
 
 TEMPLATE_CONFIG = '''# CodeSnap Configuration File
 # Examples:
@@ -155,24 +204,54 @@ class CodeSnap:
             
         return "\n".join(all_content)
 
+    def save_to_file(self, content):
+        """Save content to a text file with timestamp."""
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"codesnap_{timestamp}.txt"
+        
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(content)
+            print(f"\nContent saved to: {filename}")
+        except Exception as e:
+            raise CodeSnapError(f"Failed to save content to file: {str(e)}")
+
 def main():
     parser = argparse.ArgumentParser(
-        description='Copy code structure to clipboard. Creates a template configuration if none exists.'
+        description='Copy code structure to clipboard. Creates a template configuration if none exists.',
+        formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument('-c', '--config', help='Path to config file (default: codesnap.yml in current directory)')
     parser.add_argument('-p', '--print', action='store_true', help='Print the collected content to terminal')
+    parser.add_argument('-o', '--output', action='store_true', help='Save the content to a text file')
+    parser.add_argument('-v', '--version', action='store_true', help='Show version number')
+    parser.add_argument('--help-extended', action='store_true', help='Show extended help with examples')
+
     args = parser.parse_args()
+
+    if args.help_extended:
+        print_help()
+        sys.exit(0)
+
+    if args.version:
+        print("CodeSnap version 1.0.0")
+        sys.exit(0)
 
     try:
         snapper = CodeSnap(args.config)
         final_content = snapper.collect_content()
         pyperclip.copy(final_content)
         print("\nSuccessfully copied content to clipboard!")
+        
         if args.print:
             print(f"\nProcessed files are:\n{final_content}")
+            
+        if args.output:
+            snapper.save_to_file(final_content)
+            
     except CodeSnapError as e:
         print(f"\nError: {str(e)}")
-        print("\nFor help, ensure your codesnap.yml is properly configured.")
+        print("\nFor help, use --help-extended to see examples and configuration format")
         sys.exit(1)
     except KeyboardInterrupt:
         print("\nOperation cancelled by user.")
