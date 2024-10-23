@@ -89,6 +89,38 @@ The configuration file should be named `codesnap.yml` and placed in your project
 - Absolute paths
 - Project subdirectories
 
+## Command Line Arguments
+
+```bash
+codesnap [-h] [-c CONFIG] [-p] [-o] [-v] [--help-extended]
+```
+
+### Options:
+- `-h, --help`: Show basic help message
+- `-c CONFIG, --config CONFIG`: Path to config file (default: codesnap.yml in current directory)
+- `-p, --print`: Print the collected content to terminal
+- `-o, --output`: Save the content to a text file
+- `-v, --version`: Show version number
+- `--help-extended`: Show extended help with examples
+
+### Examples:
+```bash
+# Use specific config file
+codesnap -c /path/to/codesnap.yml
+
+# Print content to terminal without copying
+codesnap -p
+
+# Save content to file and copy to clipboard
+codesnap -o
+
+# Show version
+codesnap -v
+
+# Show detailed help and examples
+codesnap --help-extended
+```
+
 ## Future Plans
 
 1. Package Manager Distribution
