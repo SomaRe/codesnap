@@ -115,14 +115,23 @@ class CodeSnap:
         try:
             with open(self.config_path, 'r', encoding='utf-8') as f:
                 config = yaml.safe_load(f) or {}
+
+            # Initialize empty lists for missing sections
+            config['folders'] = config.get('folders', [])
+            config['files'] = config.get('files', [])
+            config['ignore'] = config.get('ignore', [])
                 
-            # Validate configuration structure
-            if not isinstance(config.get('folders', []), list):
+             # Validate configuration structure
+            if not isinstance(config['folders'], list):
                 raise CodeSnapError("'folders' must be a list")
-            if not isinstance(config.get('files', []), list):
+            if not isinstance(config['files'], list):
                 raise CodeSnapError("'files' must be a list")
-            if not isinstance(config.get('ignore', []), list):
+            if not isinstance(config['ignore'], list):
                 raise CodeSnapError("'ignore' must be a list")
+            
+            # Check if at least one file or folder is specified
+            if not config['folders'] and not config['files']:
+                raise CodeSnapError("Configuration must specify at least one file or folder to process")
                 
             return config
         except yaml.YAMLError as e:
@@ -166,28 +175,30 @@ class CodeSnap:
     def collect_content(self):
         """Collect content from all specified files and folders."""
         all_content = []
-        folders = self.config.get('folders', [])
-        files = self.config.get('files', [])
+        processed_files = 0
         
-        if not folders and not files:
-            raise CodeSnapError("No folders or files specified in configuration")
-
-        # Get content from folders
-        for folder in folders:
+        # Process folders
+        for folder in self.config['folders']:
             folder_path = self._resolve_path(folder)
             if not os.path.exists(folder_path):
                 print(f"Warning: Folder not found: {folder}")
                 continue
                 
+            folder_files = 0
             for file_path in glob.glob(os.path.join(folder_path, '**'), recursive=True):
                 if os.path.isfile(file_path) and self.should_include_file(file_path):
                     content = self.get_file_content(file_path)
                     if content:  # Only add non-empty content
                         rel_path = Path(file_path).relative_to(self.config_path.parent)
                         all_content.append(f"\n\n{'='*50}\nFile: {rel_path}\n{'='*50}\n\n{content}")
+                        folder_files += 1
+            
+            processed_files += folder_files
+            if folder_files == 0:
+                print(f"Warning: No valid files found in folder: {folder}")
 
-        # Get content from specific files
-        for file_path in files:
+        # Process individual files
+        for file_path in self.config['files']:
             resolved_path = self._resolve_path(file_path)
             if not os.path.exists(resolved_path):
                 print(f"Warning: File not found: {file_path}")
@@ -198,9 +209,10 @@ class CodeSnap:
                 if content:  # Only add non-empty content
                     rel_path = Path(resolved_path).relative_to(self.config_path.parent)
                     all_content.append(f"\n\n{'='*50}\nFile: {rel_path}\n{'='*50}\n\n{content}")
+                    processed_files += 1
 
-        if not all_content:
-            raise CodeSnapError("No valid content found to copy")
+        if processed_files == 0:
+            raise CodeSnapError("No valid content found to copy. Please check your configuration and ensure files exist.")
             
         return "\n".join(all_content)
 
