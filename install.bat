@@ -19,24 +19,28 @@ REM Create installation directory
 set "INSTALL_DIR=%USERPROFILE%\CodeSnap"
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 
-REM Try to download from GitHub first
+REM Set paths
 set "SCRIPT_PATH=%INSTALL_DIR%\codesnap.py"
-echo Attempting to download latest version from GitHub...
-powershell -Command "(New-Object Net.WebClient).DownloadFile('https://raw.githubusercontent.com/SomaRe/codesnap/main/codesnap.py', '%SCRIPT_PATH%')"
+set "LOCAL_SCRIPT=%~dp0codesnap.py"
 
-if not exist "%SCRIPT_PATH%" (
-    echo GitHub download failed. Checking for local file...
-    if exist "%~dp0codesnap.py" (
-        echo Using local codesnap.py file...
-        copy /y "%~dp0codesnap.py" "%SCRIPT_PATH%" > nul
-    ) else (
-        echo Error: Could not find codesnap.py locally or download it.
-        echo Please check your internet connection or ensure codesnap.py is in the same directory.
+REM Check for local file in the installer's directory first
+if exist "%LOCAL_SCRIPT%" (
+    echo Found codesnap.py in current directory...
+    copy /y "%LOCAL_SCRIPT%" "%SCRIPT_PATH%" > nul
+    echo Successfully copied local version to installation directory.
+) else (
+    echo No local codesnap.py found. Attempting to download from GitHub...
+    powershell -Command "(New-Object Net.WebClient).DownloadFile('https://raw.githubusercontent.com/SomaRe/codesnap/main/codesnap.py', '%SCRIPT_PATH%')"
+    
+    if not exist "%SCRIPT_PATH%" (
+        echo Error: Could not download codesnap.py from GitHub.
+        echo Please ensure codesnap.py is in the same directory as this installer
+        echo or check your internet connection.
         pause
         exit /b 1
+    ) else (
+        echo Successfully downloaded latest version from GitHub.
     )
-) else (
-    echo Successfully downloaded latest version from GitHub.
 )
 
 REM Create launcher batch script

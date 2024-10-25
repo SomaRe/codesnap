@@ -117,9 +117,9 @@ class CodeSnap:
                 config = yaml.safe_load(f) or {}
 
             # Initialize empty lists for missing sections
-            config['folders'] = config.get('folders', [])
-            config['files'] = config.get('files', [])
-            config['ignore'] = config.get('ignore', [])
+            config['folders'] = [] if config.get('folders') is None else config['folders']
+            config['files'] = [] if config.get('files') is None else config['files']
+            config['ignore'] = [] if config.get('ignore') is None else config['ignore']
                 
              # Validate configuration structure
             if not isinstance(config['folders'], list):
