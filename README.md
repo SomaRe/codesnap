@@ -1,152 +1,185 @@
-# CodeSnap
+CodeSnap
+========
 
-CodeSnap is a command-line utility that helps you quickly capture and share code structure from your projects. It allows you to specify folders and files to include, with support for ignore patterns, and copies the content to your clipboard in a well-formatted manner.
+CodeSnap is a utility that helps you quickly capture and share code structure from your projects. Available in both Go and Python implementations, it allows you to specify folders and files to include, with support for ignore patterns, and copies the content to your clipboard in a well-formatted manner.
 
-## Features
+***Note:** Future versions will not include the Python implementation.*
 
-- 📁 Capture content from multiple folders and files
-- 🚫 Ignore specific patterns (like test files or node_modules)
-- 📋 Automatic clipboard copying
-- 🔧 YAML configuration with examples
-- 💾 Creates template configuration if none exists
-- 🌟 Support for relative and absolute paths
+Features
+--------
 
-## Installation
+-   📁 Capture content from multiple folders and files
+-   🚫 Ignore specific patterns (like test files or node_modules)
+-   📋 Automatic clipboard copying
+-   🔧 YAML configuration
+-   ⏱️ Performance metrics (execution time)
 
-### Windows
-1. Download `install.bat`
-2. Double-click to install
-   - Automatically downloads latest version from GitHub
-   - Falls back to local file if download fails
-   - Adds to PATH
-   - Installs required Python packages
+Go Implementation
+-----------------
 
-### macOS (Coming Soon)
-Planned installation methods:
+### Installation
+
+1.  Download the latest `codesnap.exe` from releases
+2.  Add to PATH:
+    -   Press Win + X and select "System"
+    -   Click "Advanced system settings"
+    -   Click "Environment Variables"
+    -   Under "System Variables", find and select "Path"
+    -   Click "New" and add the directory containing codesnap.exe
+
+### Building from Source
+
 ```bash
-# Via Homebrew (coming soon)
-brew install somare/tools/codesnap
-
-# Via curl installer (coming soon)
-curl -sSL https://raw.githubusercontent.com/SomaRe/codesnap/main/install.sh | bash
+go build -o codesnap.exe main.go
 ```
 
-### Linux (Coming Soon)
-Planned installation methods:
-```bash
-# Debian/Ubuntu (coming soon)
-apt-get install codesnap
+Python Implementation
+---------------------
 
-# Via wget installer (coming soon)
-wget -qO- https://raw.githubusercontent.com/SomaRe/codesnap/main/install.sh | bash
-```
+### Installation
 
-## Usage
+#### Windows
 
-1. Navigate to your project directory:
+1.  Download `install.bat`
+2.  Double-click to install
+    -   Downloads latest version
+    -   Adds to PATH
+    -   Installs required packages
+
+Usage (Both Implementations)
+----------------------------
+
+1.  Navigate to your project directory:
+
 ```bash
 cd your-project
 ```
 
-2. Run CodeSnap:
+2.  Run CodeSnap:
+
 ```bash
 codesnap
 ```
 
-3. If no configuration exists, it will create a template `codesnap.yml` file:
+3.  First run creates a template `codesnap.yml`:
+
 ```yaml
-# CodeSnap Configuration File
 folders:
-  - src           # relative to this config file
-  - ../shared     # parent directory
+  - src           # relative to config file
   - utils         # project subdirectory
 
 files:
-  - package.json  # individual files to include
-  - config.js     # relative to this config file
+  - package.json  # individual files
+  - config.js
 
 ignore:
   - "**/*.test.js"    # ignore test files
-  - "**/node_modules/**"  # ignore node_modules
-  - "**/.git/**"     # ignore git directory
+  - "**/node_modules/**"
+  - "**/.git/**"
 ```
 
-4. Edit the configuration file to specify which folders and files to include
-5. Run `codesnap` again to copy the content to your clipboard
+4.  Edit the configuration and run again to copy content to clipboard
 
-## Configuration
-
-### File Location
-The configuration file should be named `codesnap.yml` and placed in your project root directory.
-
-### Structure
-- `folders`: List of folders to include (recursive)
-- `files`: List of individual files to include
-- `ignore`: List of glob patterns to exclude
-
-### Path Support
-- Relative paths (relative to config file location)
-- Absolute paths
-- Project subdirectories
-
-## Command Line Arguments
+Command Line Arguments
+----------------------
 
 ```bash
-codesnap [-h] [-c CONFIG] [-p] [-o] [-v] [--help-extended]
+codesnap [-h] [-c CONFIG] [-p] [-o] [-v]
 ```
 
-### Options:
-- `-h, --help`: Show basic help message
-- `-c CONFIG, --config CONFIG`: Path to config file (default: codesnap.yml in current directory)
-- `-p, --print`: Print the collected content to terminal
-- `-o, --output`: Save the content to a text file
-- `-v, --version`: Show version number
-- `--help-extended`: Show extended help with examples
+-   `-h, --help`: Show help message
+-   `-c, --config`: Specify config file path
+-   `-p, --print`: Print to terminal
+-   `-o, --output`: Save to file
+-   `-v, --version`: Show version
 
-### Examples:
+Performance comparison code results
+----------------------------------
+
+**summary:** 
+
 ```bash
-# Use specific config file
-codesnap -c /path/to/codesnap.yml
+Running performance comparison (5 runs each)...
 
-# Print content to terminal without copying
-codesnap -p
+Building Go executable...
+Go build completed in 0.323 seconds.
 
-# Save content to file and copy to clipboard
-codesnap -o
+Testing Go Executable, Go Run, and Python Run...
 
-# Show version
-codesnap -v
+Run 1/5
+Running Go executable...
+Running Go program (using `go run`)...
+Running Python script...
 
-# Show detailed help and examples
-codesnap --help-extended
+Run 2/5
+Running Go executable...
+Running Go program (using `go run`)...
+Running Python script...
+
+Run 3/5
+Running Go executable...
+Running Go program (using `go run`)...
+Running Python script...
+
+============================================================
+Performance Comparison Results
+============================================================
+
+GO EXECUTABLE PERFORMANCE:
+----------------------------------------
+  Average run time: 1.943 seconds
+  Standard deviation: 0.062 seconds
+
+GO RUN PERFORMANCE (using `go run`):
+----------------------------------------
+  Average run time: 2.533 seconds
+  Standard deviation: 0.032 seconds
+
+PYTHON RUN PERFORMANCE:
+----------------------------------------
+  Average run time: 3.665 seconds
+  Standard deviation: 0.075 seconds
+
+RELATIVE PERFORMANCE COMPARISON:
+----------------------------------------
+`go executable` is 1.30x faster than `go run`
+`go executable` is 1.89x faster than `python`
+`go run` is 1.30x slower than `go executable`
+`python` is 1.89x slower than `go executable`
+`python` is 1.45x slower than `go run`
 ```
 
-## Future Plans
+Future Plans
+------------
 
-1. Package Manager Distribution
-   - Homebrew formula for macOS
-   - APT package for Debian/Ubuntu
-   - RPM package for Red Hat/Fedora
+### Go Implementation
 
-2. Enhanced Installation Methods
-   - Shell script installer for Unix systems
-   - DMG installer for macOS
-   - MSI installer for Windows
+-   Auto-update mechanism
+-   Simplified installation process
+-   Cross-platform installers
+-   PATH setup automation
 
-3. Additional Features
-   - Output formatting options
-   - Custom templates
-   - Direct sharing capabilities
-   - IDE integrations
+### Python Implementation
 
-## Contributing
+-   Package manager distribution
+-   Enhanced installation methods
+-   IDE integrations
 
-Contributions are welcome! Please feel free to submit a Pull Request, definetly need help with MacOS and Linux.
+Contributing
+------------
 
-## License
+Contributions are welcome! Currently looking for help with:
 
-MIT License - see the LICENSE file for details
+-   MacOS and Linux support
+-   Installation automation
+-   Cross-platform testing
 
-## Author
+License
+-------
 
-- SomaRe (https://github.com/SomaRe)
+MIT License - see LICENSE file
+
+Author
+------
+
+SomaRe (<https://github.com/SomaRe>)

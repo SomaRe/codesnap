@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python
 import os
 import glob
 import pyperclip
@@ -7,6 +7,37 @@ import argparse
 from pathlib import Path
 import sys
 from datetime import datetime
+import time
+
+class Logger:
+    def __init__(self, log_to_file=False):
+        self.log_to_file = log_to_file
+        if self.log_to_file:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            self.log_file = f"codesnap_log_{timestamp}.txt"
+        self.messages = []
+        
+    def log(self, message, message_type="INFO"):
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        log_entry = f"[{timestamp}] {message_type}: {message}"
+        self.messages.append(log_entry)
+        
+        # Write to file only if logging is enabled
+        if self.log_to_file:
+            with open(self.log_file, 'a', encoding='utf-8') as f:
+                f.write(log_entry + '\n')
+    
+    def warning(self, message):
+        self.log(message, "WARNING")
+    
+    def error(self, message):
+        self.log(message, "ERROR")
+    
+    def info(self, message):
+        self.log(message, "INFO")
+
+# Create a global logger instance
+logger = Logger()
 
 def print_help():
     """Print help message with examples"""
@@ -41,20 +72,15 @@ Examples:
 
 Config File Format (codesnap.yml):
     folders:            # Folders to include (relative to config file)
-        - src
-        - lib
-        - utils
-
-    files:             # Specific files to include
-        - config.js
-        - package.json
+    -l, --log           # Save log of processed files to a log file
+    -v, --version       # Show version number
 
     ignore:            # Patterns to ignore
         - "**/*.test.js"
         - "**/node_modules/**"
         - "**/.git/**"
     """
-    print(help_text)
+    logger.info(help_text)
 
 TEMPLATE_CONFIG = '''# CodeSnap Configuration File
 # Examples:
@@ -98,12 +124,12 @@ class CodeSnap:
         config_file = current / 'codesnap.yml'
         
         if not config_file.exists():
-            print("No codesnap.yml found. Creating template configuration file...")
+            logger.info("No codesnap.yml found. Creating template configuration file...")
             try:
                 with open(config_file, 'w', encoding='utf-8') as f:
                     f.write(TEMPLATE_CONFIG)
-                print(f"Created template configuration at: {config_file}")
-                print("Please edit the file and run codesnap again.")
+                logger.info(f"Created template configuration at: {config_file}")
+                logger.info("Please edit the file and run codesnap again.")
                 sys.exit(0)
             except Exception as e:
                 raise CodeSnapError(f"Failed to create template configuration: {str(e)}")
@@ -121,7 +147,6 @@ class CodeSnap:
             config['files'] = [] if config.get('files') is None else config['files']
             config['ignore'] = [] if config.get('ignore') is None else config['ignore']
                 
-             # Validate configuration structure
             if not isinstance(config['folders'], list):
                 raise CodeSnapError("'folders' must be a list")
             if not isinstance(config['files'], list):
@@ -129,7 +154,6 @@ class CodeSnap:
             if not isinstance(config['ignore'], list):
                 raise CodeSnapError("'ignore' must be a list")
             
-            # Check if at least one file or folder is specified
             if not config['folders'] and not config['files']:
                 raise CodeSnapError("Configuration must specify at least one file or folder to process")
                 
@@ -155,10 +179,10 @@ class CodeSnap:
             with open(file_path, 'r', encoding='utf-8') as file:
                 return file.read()
         except UnicodeDecodeError:
-            print(f"Warning: Skipping binary file: {file_path}")
+            logger.warning(f"Skipping binary file: {file_path}")
             return ""
         except Exception as e:
-            print(f"Warning: Could not read {file_path}: {str(e)}")
+            logger.warning(f"Could not read {file_path}: {str(e)}")
             return ""
 
     def should_include_file(self, file_path):
@@ -170,7 +194,7 @@ class CodeSnap:
             return not any(glob.fnmatch.fnmatch(str(rel_path), pattern) 
                          for pattern in ignore_patterns)
         except Exception:
-            return True  # If pattern matching fails, include the file
+            return True
 
     def collect_content(self):
         """Collect content from all specified files and folders."""
@@ -181,32 +205,32 @@ class CodeSnap:
         for folder in self.config['folders']:
             folder_path = self._resolve_path(folder)
             if not os.path.exists(folder_path):
-                print(f"Warning: Folder not found: {folder}")
+                logger.warning(f"Folder not found: {folder}")
                 continue
                 
             folder_files = 0
             for file_path in glob.glob(os.path.join(folder_path, '**'), recursive=True):
                 if os.path.isfile(file_path) and self.should_include_file(file_path):
                     content = self.get_file_content(file_path)
-                    if content:  # Only add non-empty content
+                    if content:
                         rel_path = Path(file_path).relative_to(self.config_path.parent)
                         all_content.append(f"\n\n{'='*50}\nFile: {rel_path}\n{'='*50}\n\n{content}")
                         folder_files += 1
             
             processed_files += folder_files
             if folder_files == 0:
-                print(f"Warning: No valid files found in folder: {folder}")
+                logger.warning(f"No valid files found in folder: {folder}")
 
         # Process individual files
         for file_path in self.config['files']:
             resolved_path = self._resolve_path(file_path)
             if not os.path.exists(resolved_path):
-                print(f"Warning: File not found: {file_path}")
+                logger.warning(f"File not found: {file_path}")
                 continue
                 
             if self.should_include_file(resolved_path):
                 content = self.get_file_content(resolved_path)
-                if content:  # Only add non-empty content
+                if content:
                     rel_path = Path(resolved_path).relative_to(self.config_path.parent)
                     all_content.append(f"\n\n{'='*50}\nFile: {rel_path}\n{'='*50}\n\n{content}")
                     processed_files += 1
@@ -224,11 +248,13 @@ class CodeSnap:
         try:
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(content)
-            print(f"\nContent saved to: {filename}")
+            logger.info(f"Content saved to: {filename}")
         except Exception as e:
             raise CodeSnapError(f"Failed to save content to file: {str(e)}")
 
 def main():
+    start_time = time.time()
+
     parser = argparse.ArgumentParser(
         description='Copy code structure to clipboard. Creates a template configuration if none exists.',
         formatter_class=argparse.RawTextHelpFormatter
@@ -236,6 +262,7 @@ def main():
     parser.add_argument('-c', '--config', help='Path to config file (default: codesnap.yml in current directory)')
     parser.add_argument('-p', '--print', action='store_true', help='Print the collected content to terminal')
     parser.add_argument('-o', '--output', action='store_true', help='Save the content to a text file')
+    parser.add_argument('-l', '--log', action='store_true', help='Enable logging to a file')
     parser.add_argument('-v', '--version', action='store_true', help='Show version number')
     parser.add_argument('--help-extended', action='store_true', help='Show extended help with examples')
 
@@ -249,29 +276,39 @@ def main():
         print("CodeSnap version 1.0.0")
         sys.exit(0)
 
+    # Initialize logger with the log flag
+    global logger
+    logger = Logger(log_to_file=args.log)
+
     try:
         snapper = CodeSnap(args.config)
         final_content = snapper.collect_content()
         pyperclip.copy(final_content)
-        print("\nSuccessfully copied content to clipboard!")
+        logger.info("Successfully copied content to clipboard!")
+        print("Content copied to clipboard!")
         
         if args.print:
-            print(f"\nProcessed files are:\n{final_content}")
+            logger.info(f"Processed files are:\n{final_content}")
             
         if args.output:
             snapper.save_to_file(final_content)
             
     except CodeSnapError as e:
-        print(f"\nError: {str(e)}")
-        print("\nFor help, use --help-extended to see examples and configuration format")
+        logger.error(str(e))
+        logger.error("For help, use --help-extended to see examples and configuration format")
         sys.exit(1)
     except KeyboardInterrupt:
-        print("\nOperation cancelled by user.")
+        logger.error("Operation cancelled by user.")
         sys.exit(1)
     except Exception as e:
-        print(f"\nUnexpected error: {str(e)}")
-        print("Please report this issue if it persists.")
+        logger.error(f"Unexpected error: {str(e)}")
+        logger.error("Please report this issue if it persists.")
         sys.exit(1)
+
+    elapsed_time = time.time() - start_time
+    logger.info(f"Total execution time: {elapsed_time:.3f} seconds")
+    print(f"Total execution time: {elapsed_time:.3f} seconds")
+
 
 if __name__ == "__main__":
     main()
