@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/atotto/clipboard"
+	"github.com/bmatcuk/doublestar/v4"
 	"gopkg.in/yaml.v2"
 )
 
@@ -183,18 +184,32 @@ func (cs *CodeSnap) resolvePath(path string) string {
 	if filepath.IsAbs(path) {
 		return path
 	}
-	return filepath.Join(filepath.Dir(cs.configPath), path)
+	// First get the config file's directory
+	configDir := filepath.Dir(cs.configPath)
+	// Then join it with the relative path
+	return filepath.Join(configDir, path)
 }
 
 func (cs *CodeSnap) shouldIncludeFile(path string) bool {
+	// Convert the file path to forward slashes
 	relPath, err := filepath.Rel(filepath.Dir(cs.configPath), path)
 	if err != nil {
 		return true
 	}
 
+	// Convert to forward slashes for consistent matching
+	relPath = filepath.ToSlash(relPath)
+
 	for _, pattern := range cs.config.Ignore {
-		matched, err := filepath.Match(pattern, relPath)
+		// Convert backslashes to forward slashes in the pattern
+		pattern = filepath.ToSlash(pattern)
+
+		// Debug output
+		fmt.Printf("Checking if '%s' matches pattern '%s'\n", relPath, pattern)
+
+		matched, err := doublestar.Match(pattern, relPath)
 		if err == nil && matched {
+			fmt.Printf("Ignoring file: %s\n", path)
 			return false
 		}
 	}
@@ -257,22 +272,31 @@ func (cs *CodeSnap) collectContent(logOutput bool) (string, error) {
 		}
 	}
 
-	// Process configured folders
+	// Process configured folders using doublestar.Glob
 	for _, folder := range cs.config.Folders {
 		folderPath := cs.resolvePath(folder)
-		filepath.Walk(folderPath, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				if logOutput {
-					saveToOutput(fmt.Sprintf("Error accessing %s: %v", path, err), outputFile)
-				}
-				return nil
-			}
+		pattern := filepath.Join(folderPath, "**/*")
 
-			if !info.IsDir() && cs.shouldIncludeFile(path) {
-				processFile(path)
+		// Convert to relative path for doublestar
+		relPattern, err := filepath.Rel(cs.baseDir, pattern)
+		if err != nil {
+			continue
+		}
+
+		matches, err := doublestar.Glob(os.DirFS(cs.baseDir), relPattern)
+		if err != nil {
+			if logOutput {
+				saveToOutput(fmt.Sprintf("Error accessing %s: %v", folderPath, err), outputFile)
 			}
-			return nil
-		})
+			continue
+		}
+
+		for _, match := range matches {
+			fullPath := filepath.Join(cs.baseDir, match)
+			if cs.shouldIncludeFile(fullPath) {
+				processFile(fullPath)
+			}
+		}
 	}
 
 	// Process individual files
@@ -343,7 +367,6 @@ func (cs *CodeSnap) generateFolderStructure() (string, error) {
 		}
 
 		// Add the current item to the output
-		// relPath, _ := filepath.Rel(filepath.Dir(cs.configPath), path)
 		if info.IsDir() {
 			buffer.WriteString(fmt.Sprintf("%s%s/\n", currentPrefix, filepath.Base(path)))
 			stats.dirs++
@@ -359,18 +382,17 @@ func (cs *CodeSnap) generateFolderStructure() (string, error) {
 				return err
 			}
 
-			// Filter out ignored paths
-			var validEntries []os.DirEntry
+			// Filter and sort entries
+			var filteredEntries []os.DirEntry
 			for _, entry := range entries {
-				entryPath := filepath.Join(path, entry.Name())
-				if cs.shouldIncludeFile(entryPath) {
-					validEntries = append(validEntries, entry)
+				fullPath := filepath.Join(path, entry.Name())
+				if cs.shouldIncludeFile(fullPath) {
+					filteredEntries = append(filteredEntries, entry)
 				}
 			}
 
-			// Process each entry
-			for i, entry := range validEntries {
-				isLastEntry := i == len(validEntries)-1
+			for i, entry := range filteredEntries {
+				isLastEntry := i == len(filteredEntries)-1
 				nextPrefix := prefix
 				if isLast {
 					nextPrefix += "    "
