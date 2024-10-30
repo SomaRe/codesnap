@@ -15,7 +15,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const version = "1.0.0"
+const version = "1.1.0"
 const templateConfig = `# CodeSnap Configuration File
 # Examples:
 # folders:
@@ -37,18 +37,23 @@ const templateConfig = `# CodeSnap Configuration File
 #   - "**/*.pdf"       # ignore PDF files
 #   - "**/*.exe"       # ignore executable files
 #   - "**/*.dll"       # ignore DLL files
+#
+# tree_depth: 3       # maximum depth for folder structure (default: unlimited)
 
 folders:
 
 files:
 
 ignore:
+
+tree_depth:
 `
 
 type Config struct {
-	Folders []string `yaml:"folders"`
-	Files   []string `yaml:"files"`
-	Ignore  []string `yaml:"ignore"`
+	Folders   []string `yaml:"folders"`
+	Files     []string `yaml:"files"`
+	Ignore    []string `yaml:"ignore"`
+	TreeDepth int      `yaml:"tree_depth"`
 }
 
 type CodeSnap struct {
@@ -309,6 +314,105 @@ func (cs *CodeSnap) saveToFile(content string) error {
 	return nil
 }
 
+func (cs *CodeSnap) generateFolderStructure() (string, error) {
+	var buffer strings.Builder
+	var stats struct {
+		dirs  int
+		files int
+	}
+
+	// Helper function to print the tree structure
+	var printTree func(path string, prefix string, isLast bool, depth int) error
+
+	printTree = func(path string, prefix string, isLast bool, depth int) error {
+		if cs.config.TreeDepth > 0 && depth > cs.config.TreeDepth {
+			return nil
+		}
+
+		info, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
+
+		// Create the current line prefix
+		currentPrefix := prefix
+		if isLast {
+			currentPrefix += "└── "
+		} else {
+			currentPrefix += "├── "
+		}
+
+		// Add the current item to the output
+		// relPath, _ := filepath.Rel(filepath.Dir(cs.configPath), path)
+		if info.IsDir() {
+			buffer.WriteString(fmt.Sprintf("%s%s/\n", currentPrefix, filepath.Base(path)))
+			stats.dirs++
+		} else {
+			buffer.WriteString(fmt.Sprintf("%s%s\n", currentPrefix, filepath.Base(path)))
+			stats.files++
+		}
+
+		// If it's a directory, process its contents
+		if info.IsDir() {
+			entries, err := os.ReadDir(path)
+			if err != nil {
+				return err
+			}
+
+			// Filter out ignored paths
+			var validEntries []os.DirEntry
+			for _, entry := range entries {
+				entryPath := filepath.Join(path, entry.Name())
+				if cs.shouldIncludeFile(entryPath) {
+					validEntries = append(validEntries, entry)
+				}
+			}
+
+			// Process each entry
+			for i, entry := range validEntries {
+				isLastEntry := i == len(validEntries)-1
+				nextPrefix := prefix
+				if isLast {
+					nextPrefix += "    "
+				} else {
+					nextPrefix += "│   "
+				}
+
+				err := printTree(filepath.Join(path, entry.Name()), nextPrefix, isLastEntry, depth+1)
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		return nil
+	}
+
+	// Process configured folders
+	for i, folder := range cs.config.Folders {
+		folderPath := cs.resolvePath(folder)
+		buffer.WriteString(fmt.Sprintf("Folder: %s\n", folder))
+		if err := printTree(folderPath, "", i == len(cs.config.Folders)-1, 0); err != nil {
+			return "", fmt.Errorf("error processing folder %s: %v", folder, err)
+		}
+		buffer.WriteString("\n")
+	}
+
+	// Add summary
+	summary := fmt.Sprintf("\nStructure Summary:\n"+
+		"- Directories: %d\n"+
+		"- Files: %d\n",
+		stats.dirs,
+		stats.files)
+	buffer.WriteString(summary)
+
+	if stats.dirs == 0 && stats.files == 0 {
+		return "", fmt.Errorf("no valid folders or files were found")
+	}
+
+	return buffer.String(), nil
+}
+
 func printHelp() {
 	helpText := `
 CodeSnap - Copy your code structure to clipboard
@@ -322,6 +426,7 @@ Options:
     -p, --print         Print the collected content to terminal
     -o, --output        Save content to a timestamped text file
     -l, --log           Save log of processed files to a log file
+    -t, --tree          Generate and copy folder structure tree
     -v, --version       Show version number
 `
 	fmt.Println(helpText)
@@ -336,6 +441,7 @@ func main() {
 	logOutput := flag.Bool("l", false, "Save log of processed files to a log file")
 	showVersion := flag.Bool("v", false, "Show version number")
 	showHelp := flag.Bool("h", false, "Show help message")
+	showTree := flag.Bool("t", false, "Generate and copy folder structure tree")
 
 	flag.Parse()
 
@@ -355,7 +461,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	content, err := cs.collectContent(*logOutput)
+	var content string
+	if *showTree {
+		content, err = cs.generateFolderStructure()
+	} else {
+		content, err = cs.collectContent(*logOutput)
+	}
+
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
@@ -369,7 +481,7 @@ func main() {
 	fmt.Println("\nSuccessfully copied content to clipboard!")
 
 	if *printContent {
-		fmt.Printf("\nProcessed files are:\n%s\n", content)
+		fmt.Printf("\nContent:\n%s\n", content)
 	}
 
 	if *saveOutput {
