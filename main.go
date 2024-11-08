@@ -138,6 +138,9 @@ func NewCodeSnap(configPath string) (*CodeSnap, error) {
 	return cs, nil
 }
 
+// findOrCreateConfig searches for a configuration file at the specified path
+// and creates one if not found. If a file is created, the program exits with
+// code 0 after printing instructions to the user.
 func (cs *CodeSnap) findOrCreateConfig() error {
 	if _, err := os.Stat(cs.configPath); os.IsNotExist(err) {
 		fmt.Println("No codesnap.yml found. Creating template configuration file...")
@@ -205,7 +208,7 @@ func (cs *CodeSnap) shouldIncludeFile(path string) bool {
 		pattern = filepath.ToSlash(pattern)
 
 		// Debug output
-		fmt.Printf("Checking if '%s' matches pattern '%s'\n", relPath, pattern)
+		// fmt.Printf("Checking if '%s' matches pattern '%s'\n", relPath, pattern)
 
 		matched, err := doublestar.Match(pattern, relPath)
 		if err == nil && matched {
@@ -272,29 +275,42 @@ func (cs *CodeSnap) collectContent(logOutput bool) (string, error) {
 		}
 	}
 
-	// Process configured folders using doublestar.Glob
+	// Process configured folders
 	for _, folder := range cs.config.Folders {
 		folderPath := cs.resolvePath(folder)
-		pattern := filepath.Join(folderPath, "**/*")
 
-		// Convert to relative path for doublestar
-		relPattern, err := filepath.Rel(cs.baseDir, pattern)
-		if err != nil {
-			continue
-		}
-
-		matches, err := doublestar.Glob(os.DirFS(cs.baseDir), relPattern)
-		if err != nil {
+		// Check if folder exists
+		if _, err := os.Stat(folderPath); os.IsNotExist(err) {
 			if logOutput {
-				saveToOutput(fmt.Sprintf("Error accessing %s: %v", folderPath, err), outputFile)
+				saveToOutput(fmt.Sprintf("Folder not found: %s", folderPath), outputFile)
 			}
 			continue
 		}
 
+		fmt.Printf("Processing folder: %s\n", folderPath)
+
+		// Create pattern for all files in the folder
+		pattern := filepath.Join(folderPath, "**")
+
+		// Use FilepathGlob to find all matching files
+		matches, err := doublestar.FilepathGlob(pattern)
+		if err != nil {
+			if logOutput {
+				saveToOutput(fmt.Sprintf("Error globbing folder %s: %v", folderPath, err), outputFile)
+			}
+			continue
+		}
+
+		// Process each matched file
 		for _, match := range matches {
-			fullPath := filepath.Join(cs.baseDir, match)
-			if cs.shouldIncludeFile(fullPath) {
-				processFile(fullPath)
+			// Skip directories
+			info, err := os.Stat(match)
+			if err != nil || info.IsDir() {
+				continue
+			}
+
+			if cs.shouldIncludeFile(match) {
+				processFile(match)
 			}
 		}
 	}
