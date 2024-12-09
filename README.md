@@ -27,10 +27,14 @@ Go Implementation
     -   Under "System Variables", find and select "Path"
     -   Click "New" and add the directory containing codesnap.exe
 
-### Building from Source
+### Building from Source (from windows)
 
 ```bash
 go build -o codesnap.exe main.go
+```
+
+```bash
+$env:GOOS="linux"; $env:GOARCH="amd64"; go build -o dist/codesnap-amd64-linux main.go
 ```
 
 Python Implementation
