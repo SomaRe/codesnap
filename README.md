@@ -50,6 +50,25 @@ Python Implementation
     -   Adds to PATH
     -   Installs required packages
 
+#### Linux
+
+1. Download `codesnap-amd64-linux`
+2. Make the binary executable:
+```bash
+chmod +x codesnap-amd64-linux
+```
+3. Move to a directory in PATH or add to PATH:
+```bash
+# Option 1: Move to /usr/local/bin (requires sudo)
+sudo mv codesnap-amd64-linux /usr/local/bin/codesnap
+
+# Option 2: Add to local bin
+mkdir -p ~/.local/bin
+mv codesnap-amd64-linux ~/.local/bin/codesnap
+echo 'export PATH=$PATH:~/.local/bin' >> ~/.bashrc
+source ~/.bashrc
+```
+
 Usage (Both Implementations)
 ----------------------------
 
