@@ -19,7 +19,6 @@ jobs:
         go-os: [linux, windows, darwin]
         go-arch: [amd64, arm64]
         exclude:
-          # Exclude macOS on amd64 to reduce build matrix, can be added if needed
           - go-os: darwin
             go-arch: amd64
 
@@ -46,7 +45,7 @@ jobs:
       run: go test -v ./...
     
     - name: Upload Build Artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: codesnap-${{ matrix.go-arch }}-${{ matrix.go-os }}
         path: dist/codesnap-${{ matrix.go-arch }}-${{ matrix.go-os }}*
@@ -59,7 +58,7 @@ jobs:
     
     steps:
     - name: Download all build artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       
     - name: Create Release
       uses: softprops/action-gh-release@v1
