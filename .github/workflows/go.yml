@@ -64,11 +64,12 @@ jobs:
     steps:
     - name: Download all build artifacts
       uses: actions/download-artifact@v4
+      with:
+        path: artifacts
       
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
-        files: |
-          codesnap-*/codesnap-*
+        files: artifacts/**/*
         draft: false
         prerelease: false
