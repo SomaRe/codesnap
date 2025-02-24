@@ -16,11 +16,19 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-os: [linux, windows, darwin]
-        go-arch: [amd64, arm64]
-        exclude:
-          - go-os: darwin
-            go-arch: amd64
+        include:
+          - name: windows-amd64
+            os: windows
+            arch: amd64
+            extension: .exe
+          - name: linux-arm64
+            os: linux
+            arch: arm64
+            extension: ""
+          - name: android-arm64
+            os: android
+            arch: arm64
+            extension: ""
 
     steps:
     - uses: actions/checkout@v4
@@ -32,14 +40,11 @@ jobs:
     
     - name: Build
       env:
-        GOOS: ${{ matrix.go-os }}
-        GOARCH: ${{ matrix.go-arch }}
+        GOOS: ${{ matrix.os }}
+        GOARCH: ${{ matrix.arch }}
       run: |
-        OUTPUT="dist/codesnap-${{ matrix.go-arch }}-${{ matrix.go-os }}"
-        if [ "${{ matrix.go-os }}" = "windows" ]; then
-          OUTPUT="$OUTPUT.exe"
-        fi
-        go build -v -o $OUTPUT main.go
+        mkdir -p dist
+        go build -v -o dist/codesnap-${{ matrix.name }}${{ matrix.extension }} main.go
     
     - name: Test
       run: go test -v ./...
@@ -47,8 +52,8 @@ jobs:
     - name: Upload Build Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: codesnap-${{ matrix.go-arch }}-${{ matrix.go-os }}
-        path: dist/codesnap-${{ matrix.go-arch }}-${{ matrix.go-os }}*
+        name: codesnap-${{ matrix.name }}
+        path: dist/codesnap-${{ matrix.name }}${{ matrix.extension }}
         if-no-files-found: error
 
   release:
