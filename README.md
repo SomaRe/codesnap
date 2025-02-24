@@ -37,6 +37,10 @@ go build -o codesnap.exe main.go
 $env:GOOS="linux"; $env:GOARCH="amd64"; go build -o dist/codesnap-amd64-linux main.go
 ```
 
+```bash
+$env:GOOS="android"; $env:GOARCH="arm64"; go build -o dist/codesnap-arm64-android main.go
+```
+
 Python Implementation
 ---------------------
 
