@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -20,34 +22,27 @@ const version = "1.1.0"
 const templateConfig = `# CodeSnap Configuration File
 # Examples:
 # folders:
-#   - src           # relative to this config file
-#   - ../shared     # parent directory
-#   - utils         # project subdirectory
-#
+# - src # relative to this config file
+# - ../shared # parent directory
+# - utils # project subdirectory
 # files:
-#   - package.json  # individual files to include
-#   - config.js     # relative to this config file
-#
+# - package.json # individual files to include
+# - config.js # relative to this config file
 # ignore:
-#   - "**/*.test.js"    # ignore test files
-#   - "**/node_modules/**"  # ignore node_modules
-#   - "**/.git/**"     # ignore git directory
-#   - "**/*.jpg"       # ignore image files
-#   - "**/*.png"       # ignore image files
-#   - "**/*.gif"       # ignore image files
-#   - "**/*.pdf"       # ignore PDF files
-#   - "**/*.exe"       # ignore executable files
-#   - "**/*.dll"       # ignore DLL files
-#
-# tree_depth: 3       # maximum depth for folder structure (default: unlimited)
-
+# - "**/*.test.js" # ignore test files
+# - "**/node_modules/**" # ignore node_modules
+# - "**/.git/**" # ignore git directory
+# - "**/*.jpg" # ignore image files
+# - "**/*.png" # ignore image files
+# - "**/*.gif" # ignore image files
+# - "**/*.pdf" # ignore PDF files
+# - "**/*.exe" # ignore executable files
+# - "**/*.dll" # ignore DLL files
+# tree_depth: 3 # maximum depth for folder structure (default: unlimited)
 folders:
-
 files:
-
 ignore:
-
-tree_depth:
+tree_depth:  
 `
 
 type Config struct {
@@ -61,6 +56,17 @@ type CodeSnap struct {
 	configPath string
 	config     *Config
 	baseDir    string
+}
+
+// FileResult represents the processing result of a single file
+type FileResult struct {
+	path    string
+	relPath string
+	content string
+	isEmpty bool
+	err     error
+	isValid bool
+	skipped bool
 }
 
 // validateFile checks if a file is a readable text file
@@ -202,17 +208,11 @@ func (cs *CodeSnap) shouldIncludeFile(path string) bool {
 
 	// Convert to forward slashes for consistent matching
 	relPath = filepath.ToSlash(relPath)
-
 	for _, pattern := range cs.config.Ignore {
 		// Convert backslashes to forward slashes in the pattern
 		pattern = filepath.ToSlash(pattern)
-
-		// Debug output
-		// fmt.Printf("Checking if '%s' matches pattern '%s'\n", relPath, pattern)
-
 		matched, err := doublestar.Match(pattern, relPath)
 		if err == nil && matched {
-			fmt.Printf("Ignoring file: %s\n", path)
 			return false
 		}
 	}
@@ -234,8 +234,14 @@ func saveToOutput(message string, outputFile string) error {
 	if _, err := file.WriteString(logEntry); err != nil {
 		return fmt.Errorf("failed to write to output file: %v", err)
 	}
-
 	return nil
+}
+
+// New structure for tracking stats atomically
+type Stats struct {
+	processed int64
+	empty     int64
+	skipped   int64
 }
 
 func (cs *CodeSnap) collectContent(logOutput bool) (string, error) {
@@ -244,41 +250,18 @@ func (cs *CodeSnap) collectContent(logOutput bool) (string, error) {
 		outputFile = fmt.Sprintf("codesnap_log_%s.txt", time.Now().Format("20060102_150405"))
 	}
 
-	var allContent strings.Builder
-	var stats struct {
-		processed int
-		empty     int
-		skipped   int
-	}
+	var stats Stats
+	var filePaths []string
+	var mutex sync.Mutex
+	var wg sync.WaitGroup
+	var resultsMutex sync.Mutex
+	var results []*FileResult
+	// var errOccurred atomic.Bool
 
-	// Helper function to process a single file
-	processFile := func(path string) {
-		relPath, _ := filepath.Rel(filepath.Dir(cs.configPath), path)
-
-		isValid, content, err := validateFile(path)
-		if err != nil {
-			stats.skipped++
-			if logOutput {
-				saveToOutput(fmt.Sprintf("Skipping %s: %v", relPath, err), outputFile)
-			}
-			return
-		}
-
-		stats.processed++
-		if !isValid || len(content) == 0 {
-			stats.empty++
-			allContent.WriteString(fmt.Sprintf("\n\n%s\nFile: %s (empty)\n%s",
-				strings.Repeat("=", 50), relPath, strings.Repeat("=", 50)))
-		} else {
-			allContent.WriteString(fmt.Sprintf("\n\n%s\nFile: %s\n%s\n\n%s",
-				strings.Repeat("=", 50), relPath, strings.Repeat("=", 50), content))
-		}
-	}
-
+	// First build the list of files to process
 	// Process configured folders
 	for _, folder := range cs.config.Folders {
 		folderPath := cs.resolvePath(folder)
-
 		// Check if folder exists
 		if _, err := os.Stat(folderPath); os.IsNotExist(err) {
 			if logOutput {
@@ -287,11 +270,9 @@ func (cs *CodeSnap) collectContent(logOutput bool) (string, error) {
 			continue
 		}
 
-		fmt.Printf("Processing folder: %s\n", folderPath)
-
+		fmt.Printf("Finding files in folder: %s\n", folderPath)
 		// Create pattern for all files in the folder
 		pattern := filepath.Join(folderPath, "**")
-
 		// Use FilepathGlob to find all matching files
 		matches, err := doublestar.FilepathGlob(pattern)
 		if err != nil {
@@ -301,16 +282,15 @@ func (cs *CodeSnap) collectContent(logOutput bool) (string, error) {
 			continue
 		}
 
-		// Process each matched file
+		// Add matched files to the list
 		for _, match := range matches {
 			// Skip directories
 			info, err := os.Stat(match)
 			if err != nil || info.IsDir() {
 				continue
 			}
-
 			if cs.shouldIncludeFile(match) {
-				processFile(match)
+				filePaths = append(filePaths, match)
 			}
 		}
 	}
@@ -319,23 +299,114 @@ func (cs *CodeSnap) collectContent(logOutput bool) (string, error) {
 	for _, file := range cs.config.Files {
 		filePath := cs.resolvePath(file)
 		if cs.shouldIncludeFile(filePath) {
-			processFile(filePath)
+			filePaths = append(filePaths, filePath)
+		}
+	}
+
+	fmt.Printf("Found %d files to process\n", len(filePaths))
+
+	// Create a channel to communicate work to worker goroutines
+	jobs := make(chan string, len(filePaths))
+	results = make([]*FileResult, 0, len(filePaths))
+
+	// Determine the number of workers based on CPU cores
+	numWorkers := 8 // You can adjust this based on your machine
+
+	// Create worker goroutines
+	for w := 1; w <= numWorkers; w++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for filePath := range jobs {
+				relPath, _ := filepath.Rel(filepath.Dir(cs.configPath), filePath)
+				isValid, content, err := validateFile(filePath)
+
+				result := &FileResult{
+					path:    filePath,
+					relPath: relPath,
+					isValid: isValid,
+				}
+
+				if err != nil {
+					atomic.AddInt64(&stats.skipped, 1)
+					result.err = err
+					result.skipped = true
+					if logOutput {
+						saveToOutput(fmt.Sprintf("Skipping %s: %v", relPath, err), outputFile)
+					}
+				} else {
+					atomic.AddInt64(&stats.processed, 1)
+					result.content = content
+					if !isValid || len(content) == 0 {
+						atomic.AddInt64(&stats.empty, 1)
+						result.isEmpty = true
+					}
+				}
+
+				resultsMutex.Lock()
+				results = append(results, result)
+				resultsMutex.Unlock()
+
+				processed := atomic.LoadInt64(&stats.processed)
+				skipped := atomic.LoadInt64(&stats.skipped)
+				total := processed + skipped
+
+				if total%50 == 0 || total == int64(len(filePaths)) {
+					fmt.Printf("\rProcessed: %d, Skipped: %d, Total: %d/%d",
+						processed, skipped, total, len(filePaths))
+				}
+			}
+		}(w)
+	}
+
+	// Send work to workers
+	for _, filePath := range filePaths {
+		jobs <- filePath
+	}
+	close(jobs)
+
+	// Wait for all workers to finish
+	wg.Wait()
+	fmt.Println() // Add a newline after progress
+
+	// Sort results to maintain consistent order
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	// Build the final content string
+	var allContent strings.Builder
+
+	for _, result := range results {
+		if result.skipped {
+			continue
+		}
+
+		if result.isEmpty {
+			allContent.WriteString(fmt.Sprintf("\n\n%s\nFile: %s (empty)\n%s",
+				strings.Repeat("=", 50), result.relPath, strings.Repeat("=", 50)))
+		} else {
+			allContent.WriteString(fmt.Sprintf("\n\n%s\nFile: %s\n%s\n\n%s",
+				strings.Repeat("=", 50), result.relPath, strings.Repeat("=", 50), result.content))
 		}
 	}
 
 	// Add summary
+	processed := atomic.LoadInt64(&stats.processed)
+	empty := atomic.LoadInt64(&stats.empty)
+	skipped := atomic.LoadInt64(&stats.skipped)
+
 	summary := fmt.Sprintf("\n\n%s\nSummary:\n"+
 		"- Files processed: %d\n"+
 		"- Empty files: %d\n"+
 		"- Files skipped: %d\n%s",
 		strings.Repeat("=", 50),
-		stats.processed,
-		stats.empty,
-		stats.skipped,
+		processed,
+		empty,
+		skipped,
 		strings.Repeat("=", 50))
 	allContent.WriteString(summary)
 
-	if stats.processed == 0 {
+	if processed == 0 {
 		return "", fmt.Errorf("no valid files were processed")
 	}
 
@@ -349,7 +420,6 @@ func (cs *CodeSnap) saveToFile(content string) error {
 	if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
 		return fmt.Errorf("failed to save content to file: %v", err)
 	}
-
 	fmt.Printf("Content saved to: %s\n", filename)
 	return nil
 }
@@ -363,17 +433,14 @@ func (cs *CodeSnap) generateFolderStructure() (string, error) {
 
 	// Helper function to print the tree structure
 	var printTree func(path string, prefix string, isLast bool, depth int) error
-
 	printTree = func(path string, prefix string, isLast bool, depth int) error {
 		if cs.config.TreeDepth > 0 && depth > cs.config.TreeDepth {
 			return nil
 		}
-
 		info, err := os.Stat(path)
 		if err != nil {
 			return err
 		}
-
 		// Create the current line prefix
 		currentPrefix := prefix
 		if isLast {
@@ -381,7 +448,6 @@ func (cs *CodeSnap) generateFolderStructure() (string, error) {
 		} else {
 			currentPrefix += "├── "
 		}
-
 		// Add the current item to the output
 		if info.IsDir() {
 			buffer.WriteString(fmt.Sprintf("%s%s/\n", currentPrefix, filepath.Base(path)))
@@ -390,14 +456,12 @@ func (cs *CodeSnap) generateFolderStructure() (string, error) {
 			buffer.WriteString(fmt.Sprintf("%s%s\n", currentPrefix, filepath.Base(path)))
 			stats.files++
 		}
-
 		// If it's a directory, process its contents
 		if info.IsDir() {
 			entries, err := os.ReadDir(path)
 			if err != nil {
 				return err
 			}
-
 			// Filter and sort entries
 			var filteredEntries []os.DirEntry
 			for _, entry := range entries {
@@ -406,7 +470,6 @@ func (cs *CodeSnap) generateFolderStructure() (string, error) {
 					filteredEntries = append(filteredEntries, entry)
 				}
 			}
-
 			for i, entry := range filteredEntries {
 				isLastEntry := i == len(filteredEntries)-1
 				nextPrefix := prefix
@@ -415,17 +478,14 @@ func (cs *CodeSnap) generateFolderStructure() (string, error) {
 				} else {
 					nextPrefix += "│   "
 				}
-
 				err := printTree(filepath.Join(path, entry.Name()), nextPrefix, isLastEntry, depth+1)
 				if err != nil {
 					return err
 				}
 			}
 		}
-
 		return nil
 	}
-
 	// Process configured folders
 	for i, folder := range cs.config.Folders {
 		folderPath := cs.resolvePath(folder)
@@ -435,7 +495,6 @@ func (cs *CodeSnap) generateFolderStructure() (string, error) {
 		}
 		buffer.WriteString("\n")
 	}
-
 	// Add summary
 	summary := fmt.Sprintf("\nStructure Summary:\n"+
 		"- Directories: %d\n"+
@@ -443,29 +502,26 @@ func (cs *CodeSnap) generateFolderStructure() (string, error) {
 		stats.dirs,
 		stats.files)
 	buffer.WriteString(summary)
-
 	if stats.dirs == 0 && stats.files == 0 {
 		return "", fmt.Errorf("no valid folders or files were found")
 	}
-
 	return buffer.String(), nil
 }
 
 func printHelp() {
 	helpText := `
 CodeSnap - Copy your code structure to clipboard
-
-Usage: 
-    codesnap [options]
+Usage:
+  codesnap [options]
 
 Options:
-    -h, --help          Show this help message
-    -c, --config PATH   Specify path to config file (default: codesnap.yml in current directory)
-    -p, --print         Print the collected content to terminal
-    -o, --output        Save content to a timestamped text file
-    -l, --log           Save log of processed files to a log file
-    -t, --tree          Generate and copy folder structure tree
-    -v, --version       Show version number
+  -h, --help       Show this help message
+  -c, --config PATH Specify path to config file (default: codesnap.yml in current directory)
+  -p, --print      Print the collected content to terminal
+  -o, --output     Save content to a timestamped text file
+  -l, --log        Save log of processed files to a log file
+  -t, --tree       Generate and copy folder structure tree
+  -v, --version    Show version number
 `
 	fmt.Println(helpText)
 }
@@ -516,7 +572,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("\nSuccessfully copied content to clipboard!")
+	if *showTree {
+		fmt.Println("\nDirectory tree structure successfully copied to clipboard!")
+	} else {
+		fmt.Println("\nSuccessfully copied code content to clipboard!")
+	}
 
 	if *printContent {
 		fmt.Printf("\nContent:\n%s\n", content)
