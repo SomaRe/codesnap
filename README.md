@@ -30,7 +30,7 @@ Go Implementation
 ### Building from Source (from windows)
 
 ```bash
-go build -o codesnap.exe main.go
+go build -o dist/codesnap.exe main.go
 ```
 
 ```bash
