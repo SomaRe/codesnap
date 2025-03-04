@@ -25,9 +25,11 @@ const templateConfig = `# CodeSnap Configuration File
 # - src # relative to this config file
 # - ../shared # parent directory
 # - utils # project subdirectory
+#
 # files:
 # - package.json # individual files to include
 # - config.js # relative to this config file
+#
 # ignore:
 # - "**/*.test.js" # ignore test files
 # - "**/node_modules/**" # ignore node_modules
@@ -38,10 +40,15 @@ const templateConfig = `# CodeSnap Configuration File
 # - "**/*.pdf" # ignore PDF files
 # - "**/*.exe" # ignore executable files
 # - "**/*.dll" # ignore DLL files
+#
 # tree_depth: 3 # maximum depth for folder structure (default: unlimited)
+
 folders:
+
 files:
+
 ignore:
+
 tree_depth:  
 `
 
