@@ -73,6 +73,38 @@ echo 'export PATH=$PATH:~/.local/bin' >> ~/.bashrc
 source ~/.bashrc
 ```
 
+---
+
+### ✅ **One-Stop Install Steps for `codesnap` in a Linux Dev Container**
+
+Run these commands **one after another** in your terminal:
+
+```bash
+# 1. Download the latest codesnap binary
+wget https://github.com/SomaRe/codesnap/releases/latest/download/codesnap-linux-amd64 -O codesnap
+
+# 2. Make it executable
+chmod +x codesnap
+
+# 3. Move it to a globally accessible location
+# Prefer /usr/local/bin if available
+sudo mv codesnap /usr/local/bin/codesnap
+
+# 4. Verify installation
+which codesnap
+codesnap --help
+```
+
+---
+
+### ✅ Notes:
+- `/usr/local/bin` is standard and usually in `$PATH`, even in minimal containers.
+- `sudo` may not be required in some dev containers — if not present or needed, just move it without `sudo`:
+  ```bash
+  mv codesnap /usr/local/bin/codesnap
+  ```
+
+
 Usage (Both Implementations)
 ----------------------------
 
