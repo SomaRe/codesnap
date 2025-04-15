@@ -431,6 +431,34 @@ func (cs *CodeSnap) saveToFile(content string) error {
 	return nil
 }
 
+// overrideWithCommandLinePaths replaces the configured folders and files
+// with the paths provided on the command line
+func (cs *CodeSnap) overrideWithCommandLinePaths(paths []string) {
+	// Clear existing folders and files from config
+	cs.config.Folders = []string{}
+	cs.config.Files = []string{}
+	
+	// Process each provided path
+	for _, path := range paths {
+		// Check if the path exists
+		info, err := os.Stat(path)
+		if err != nil {
+			fmt.Printf("Warning: Path not found or not accessible: %s\n", path)
+			continue
+		}
+		
+		// Add to appropriate list based on whether it's a directory or file
+		if info.IsDir() {
+			cs.config.Folders = append(cs.config.Folders, path)
+		} else {
+			cs.config.Files = append(cs.config.Files, path)
+		}
+	}
+	
+	fmt.Printf("Using command-line paths: %d folders, %d files\n", 
+		len(cs.config.Folders), len(cs.config.Files))
+}
+
 func (cs *CodeSnap) generateFolderStructure() (string, error) {
 	var buffer strings.Builder
 	var stats struct {
@@ -519,7 +547,7 @@ func printHelp() {
 	helpText := `
 CodeSnap - Copy your code structure to clipboard
 Usage:
-  codesnap [options]
+  codesnap [options] [path1 path2 ...]
 
 Options:
   -h, --help       Show this help message
@@ -529,6 +557,10 @@ Options:
   -l, --log        Save log of processed files to a log file
   -t, --tree       Generate and copy folder structure tree
   -v, --version    Show version number
+
+Arguments:
+  [path1 path2 ...] Optional paths to process instead of those in config file
+                    (will still use ignore patterns and tree_depth from config)
 `
 	fmt.Println(helpText)
 }
@@ -545,6 +577,9 @@ func main() {
 	showTree := flag.Bool("t", false, "Generate and copy folder structure tree")
 
 	flag.Parse()
+	
+	// Check for non-flag arguments which would be paths
+	args := flag.Args()
 
 	if *showHelp {
 		printHelp()
@@ -560,6 +595,11 @@ func main() {
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
+	}
+	
+	// If command-line paths were provided, override the config paths
+	if len(args) > 0 {
+		cs.overrideWithCommandLinePaths(args)
 	}
 
 	var content string
