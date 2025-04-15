@@ -48,6 +48,29 @@ folders:
 files:
 
 ignore:
+  - "**/node_modules/**" # ignore node_modules
+  - "**/.git/**" # ignore git directory
+  - "**/venv/**" # ignore Python virtual environments
+  - "**/.venv/**" # ignore Python virtual environments
+  - "**/__pycache__/**" # ignore Python cache
+  - "**/*.pyc" # ignore Python compiled files
+  - "**/__init__.py" # ignore Python init files
+  - "**/.env" # ignore environment files
+  - "**/.DS_Store" # ignore macOS system files
+  - "**/*.db" # ignore database files
+  - "**/*.sqlite" # ignore SQLite database files
+  - "**/*.sqlite3" # ignore SQLite database files
+  - "**/*.jpg" # ignore image files
+  - "**/*.jpeg" # ignore image files
+  - "**/*.png" # ignore image files
+  - "**/*.gif" # ignore image files
+  - "**/*.pdf" # ignore PDF files
+  - "**/*.exe" # ignore executable files
+  - "**/*.dll" # ignore DLL files
+  - "**/*.so" # ignore shared libraries
+  - "**/*.dylib" # ignore macOS dynamic libraries
+  - "**/dist/**" # ignore distribution directories
+  - "**/build/**" # ignore build directories
 
 tree_depth:  
 `
